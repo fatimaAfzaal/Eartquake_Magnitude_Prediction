@@ -1,20 +1,14 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import numpy as np
 import pandas as pd
-from sklearn import preprocessing
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.model_selection import train_test_split, cross_val_score, KFold
-from sklearn.neighbors import KNeighborsRegressor
 from catboost import CatBoostRegressor
 import time
 import pickle
 
 # Initialize the Flask application
 app = Flask(__name__)
-
-
 
 # Load and preprocess the dataset
 def load_and_preprocess_data():
@@ -27,7 +21,6 @@ def load_and_preprocess_data():
 
     # Identify categorical columns
     categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
-    print(df)
 
     # Separate features and target variable
     y = df['xm']
@@ -35,17 +28,14 @@ def load_and_preprocess_data():
 
     return X, y, categorical_cols
 
-
-# Train the KNN model
-def train_knn_model(X, y,categorical_cols):
+# Train the CatBoost model
+def train_knn_model(X, y, categorical_cols):
     # Split the data
-
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # Train and evaluate CatBoost model using k-fold cross-validation
     kfold = KFold(n_splits=3, shuffle=True, random_state=42)
-    catboost_model = CatBoostRegressor(iterations=100, learning_rate=0.1, depth=6, cat_features=categorical_cols,
-                                       silent=True)
+    catboost_model = CatBoostRegressor(iterations=100, learning_rate=0.1, depth=6, cat_features=categorical_cols, silent=True)
 
     # Evaluate model using cross-validation
     cv_scores = cross_val_score(catboost_model, X, y, cv=kfold, scoring='neg_mean_squared_error')
@@ -86,48 +76,45 @@ def train_knn_model(X, y,categorical_cols):
 
     return catboost_model, X_train, X_test, y_train, y_test
 
-
 # Load data and train model
-X, y,categorical_cols = load_and_preprocess_data()
+X, y, categorical_cols = load_and_preprocess_data()
 knn_model, X_train, X_test, y_train, y_test = train_knn_model(X, y, categorical_cols)
 
-# Save the trained KNN model
-with open('knn_model.pkl', 'wb') as file:
+# Save the trained  model
+with open('catboost_model.pkl', 'wb') as file:
     pickle.dump(knn_model, file)
 
 # Load the trained model
-with open('knn_model.pkl', 'rb') as file:
+with open('catboost_model.pkl', 'rb') as file:
     knn_model = pickle.load(file)
-
 
 # Home route
 @app.route('/')
 def home():
-    return "Welcome to the Earthquake Prediction API!"
-
+    return render_template('index.html')
 
 # Prediction route
 @app.route('/predict', methods=['POST'])
 def predict():
-    lat = float(request.form.get('lat'))
-    long = float(request.form.get('long'))
-    country = (request.form.get('country'))
-    city = (request.form.get('city'))
-    area = (request.form.get('area'))
-    direction =   (request.form.get('direction'))
-    depth = float(request.form.get('depth'))
-    md = float(request.form.get('md'))
-    ritcher = float(request.form.get('ritcher'))
-    ms = float(request.form.get('ms'))
-    mb = float(request.form.get('mb'))
+    data = request.form
+    lat = float(data['lat'])
+    long = float(data['long'])
+    country = data['country']
+    city = data['city']
+    area = data['area']
+    direction = data['direction']
+    depth = float(data['depth'])
+    md = float(data['md'])
+    ritcher = float(data['ritcher'])
+    ms = float(data['ms'])
+    mb = float(data['mb'])
 
     input_query = np.array([[lat, long, country, city, area, direction, depth, md, ritcher, ms, mb]])
 
     prediction = knn_model.predict(input_query)[0]
 
     # Return prediction as JSON
-    return jsonify({'predicted_xm': str(prediction)})
-
+    return render_template('index.html',prediction_text="Result: {}".format(prediction))
 
 # Main function to run the Flask app
 if __name__ == '__main__':
